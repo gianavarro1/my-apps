@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#faf6f0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Trips">
+<title>Trip Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #faf6f0;
+    --card: #ffffff;
+    --ink: #2b2a28;
+    --muted: #8a857d;
+    --accent: #e2674a;
+    --accent-soft: #fdeee9;
+    --teal: #2f6f6a;
+    --teal-soft: #e4f0ef;
+    --border: #eee7dc;
+    --radius: 16px;
+    --shadow: 0 2px 10px rgba(60,50,40,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 24px 10px;
+    text-align: center;
+    position: relative;
+  }
+  #back-btn {
+    position: absolute;
+    left: 16px;
+    top: 24px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    display: none;
+  }
+  body.in-trip #back-btn { display: block; }
+  #back-btn:hover { transform: translateY(-1px); }
+  header h1 { font-size: 26px; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  nav.tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 16px 20px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    background: linear-gradient(var(--bg) 85%, transparent);
+    z-index: 50;
+  }
+  nav.tabs button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: all .15s;
+  }
+  nav.tabs button:hover { transform: translateY(-1px); }
+  nav.tabs button.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+
+  main { max-width: 1060px; margin: 0 auto; padding: 0 20px 80px; }
+  section.tab { display: none; }
+  section.tab.active { display: block; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
+  }
+  h2.section-title { font-size: 18px; margin-bottom: 4px; }
+  p.section-sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+
+  button.btn {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  button.btn:hover { filter: brightness(.95); }
+  button.btn.ghost {
+    background: transparent;
+    color: var(--teal);
+    border: 1px solid var(--teal);
+  }
+  button.btn.subtle {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  button.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  button.icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
+
+  input[type="text"], input[type="date"], textarea, select {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fffdfa;
+    color: var(--ink);
+    outline: none;
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+
+  /* ---------- HOME (trip picker) ---------- */
+  body:not(.in-trip) nav.tabs { display: none; }
+  body:not(.in-trip) main section.tab { display: none !important; }
+  body.in-trip #home { display: none; }
+  #home { max-width: 720px; margin: 0 auto; padding: 10px 20px 80px; }
+  .trip-form { display: flex; gap: 8px; margin-bottom: 20px; }
+  .trip-grid { display: flex; flex-direction: column; gap: 12px; }
+  .trip-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px;
+    cursor: pointer;
+    transition: transform .12s;
+  }
+  .trip-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .trip-card .t-emoji { font-size: 30px; }
+  .trip-card .t-name { font-weight: 700; font-size: 17px; }
+  .trip-card .t-stats { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .trip-card .grow { flex: 1; min-width: 0; }
+  input.needs-name {
+    border-color: #c0392b !important;
+    animation: shake .35s;
+  }
+  input.needs-name::placeholder { color: #c0392b; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-3px); }
+  }
+
+  /* ---------- PLACES ---------- */
+  .places-layout { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 800px) { .places-layout { grid-template-columns: 1fr; } }
+  .place-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .place-list { display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow-y: auto; }
+  .place-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    background: #fffdfa;
+  }
+  .place-item:hover { border-color: var(--accent); }
+  .place-item.selected { background: var(--accent-soft); border-color: var(--accent); }
+  .place-item .p-name { font-weight: 600; font-size: 14px; flex: 1; }
+  .place-item .p-query { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;}
+  .map-wrap { position: relative; }
+  .map-wrap iframe {
+    width: 100%; height: 520px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #eef2f0;
+  }
+  #map-osm {
+    width: 100%; height: 520px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #eef2f0;
+    position: relative; z-index: 1;
+  }
+  .map-toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .map-toolbar .spacer { flex: 1; }
+  .mymaps-row { display: flex; gap: 8px; margin-top: 10px; }
+  .empty-note { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 10px; }
+
+  /* ---------- ITINERARY ---------- */
+  .day-card { margin-bottom: 16px; }
+  .day-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .day-head input[type="date"] { width: 150px; }
+  .day-head input.day-title { flex: 1; min-width: 160px; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--teal-soft); color: var(--teal);
+    font-size: 12px; font-weight: 600;
+    padding: 5px 10px; border-radius: 999px;
+    cursor: pointer;
+  }
+  .chip .x { cursor: pointer; opacity: .6; font-weight: 700; }
+  .chip .x:hover { opacity: 1; }
+  .chips select { width: auto; font-size: 12px; padding: 5px 8px; border-radius: 999px; color: var(--muted); }
+
+  /* ---------- PACKING ---------- */
+  .packing-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .packing-toolbar .progress { color: var(--muted); font-size: 13px; font-weight: 600; }
+  .packing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .pack-section h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .pack-section h3 .count { color: var(--muted); font-size: 12px; font-weight: 500; }
+  .pack-section h3 .grow { flex: 1; }
+  .pack-items { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+  .pack-item { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 8px; }
+  .pack-item:hover { background: #faf6f0; }
+  .pack-item:hover .row-actions { visibility: visible; }
+  .row-actions { visibility: hidden; display: flex; }
+  .pack-item input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+  .pack-item label { font-size: 14px; flex: 1; cursor: pointer; }
+  .pack-item.done label { text-decoration: line-through; color: var(--muted); }
+  .add-item-row { display: flex; gap: 6px; margin-top: 10px; }
+  .add-item-row input { font-size: 13px; padding: 7px 10px; }
+  .add-section-row { display: flex; gap: 8px; margin-top: 18px; max-width: 360px; }
+
+  /* ---------- OUTFITS ---------- */
+  .outfit-toolbar { display: flex; gap: 8px; margin-bottom: 16px; max-width: 420px; }
+  .outfit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .outfit-card h3 { font-size: 15px; display: flex; align-items: center; }
+  .outfit-card h3 .grow { flex: 1; }
+  .outfit-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .outfit-pics .thumb {
+    position: relative; width: 84px; height: 84px;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border);
+    background: #f4efe8;
+  }
+  .outfit-pics .thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+  .outfit-pics .thumb .del {
+    position: absolute; top: 3px; right: 3px;
+    background: rgba(0,0,0,.55); color: #fff;
+    border: none; border-radius: 50%;
+    width: 18px; height: 18px; font-size: 11px; line-height: 1;
+    cursor: pointer;
+  }
+  .add-pic {
+    width: 84px; height: 84px;
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    background: none;
+    color: var(--muted);
+    font-size: 22px;
+    cursor: pointer;
+  }
+  .add-pic:hover { border-color: var(--accent); color: var(--accent); }
+  .outfit-note { margin-top: 4px; }
+  .outfit-note textarea { min-height: 54px; font-size: 13px; }
+
+  /* lightbox */
+  #lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(20,15,10,.85);
+    z-index: 200;
+    align-items: center; justify-content: center;
+    cursor: zoom-out;
+    padding: 30px;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; }
+
+  .danger { color: #c0392b !important; }
+
+  #error-banner {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #c0392b; color: #fff;
+    font-size: 13px; padding: 10px 16px;
+    z-index: 500; text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <button id="back-btn" onclick="closeTrip()">← All trips</button>
+  <h1 id="header-title">✈️ Trip <span>Planner</span></h1>
+  <p id="header-sub">Pick a trip or start a new one — everything saves automatically in this browser</p>
+</header>
+
+<section id="home">
+  <div class="trip-form">
+    <input type="text" id="new-trip-name" placeholder="New trip (e.g. Paris — June 2027)"
+      onkeydown="if(event.key==='Enter'){addTrip()}">
+    <button class="btn" onclick="addTrip()">+ Create</button>
+  </div>
+  <div class="trip-grid" id="trip-grid"></div>
+  <div class="empty-note" id="trips-empty" style="display:none">No trips yet — create your first one above ✈️</div>
+</section>
+
+<nav class="tabs">
+  <button data-tab="places">📍 Places</button>
+  <button data-tab="itinerary">🗓 Itinerary</button>
+  <button data-tab="packing">🎒 Packing</button>
+  <button data-tab="outfits">👗 Outfits</button>
+</nav>
+
+<main>
+
+  <!-- PLACES -->
+  <section class="tab" id="tab-places">
+    <div class="places-layout">
+      <div class="card">
+        <h2 class="section-title">Saved places</h2>
+        <p class="section-sub">Add spots you want to visit. Click one to see it on the map.</p>
+        <div class="place-form">
+          <input type="text" id="place-name" placeholder="Name (e.g. Café de Flore)">
+          <input type="text" id="place-query" placeholder="Address or search (e.g. Café de Flore, Paris)">
+          <button class="btn" onclick="addPlace()">+ Add place</button>
+        </div>
+        <div class="place-list" id="place-list"></div>
+      </div>
+      <div class="map-wrap card">
+        <div class="map-toolbar">
+          <h2 class="section-title" id="map-title">Map</h2>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="mymaps-toggle" style="display:none" onclick="toggleMyMaps()">Show my Google map</button>
+          <a id="open-gmaps" href="#" target="_blank" style="display:none"><button class="btn subtle">Open in Google Maps ↗</button></a>
+        </div>
+        <div id="map-osm" style="display:none"></div>
+        <iframe id="map-frame" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+        <div class="mymaps-row">
+          <input type="text" id="mymaps-input" placeholder="Optional: paste a Google My Maps share link to embed your own saved map">
+          <button class="btn ghost" onclick="saveMyMaps()">Save</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITINERARY -->
+  <section class="tab" id="tab-itinerary">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+      <div>
+        <h2 class="section-title">Itinerary</h2>
+        <p class="section-sub" style="margin:0">Notes for each day — link your saved places to any day.</p>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="addDay()">+ Add day</button>
+    </div>
+    <div id="day-list"></div>
+    <div class="empty-note" id="itinerary-empty" style="display:none">No days yet — add your first day above.</div>
+  </section>
+
+  <!-- PACKING -->
+  <section class="tab" id="tab-packing">
+    <div class="packing-toolbar">
+      <div>
+        <h2 class="section-title">Packing list</h2>
+        <p class="section-sub" style="margin:0">Check things off as you pack. Reset keeps your list but unchecks everything.</p>
+      </div>
+      <div style="flex:1"></div>
+      <span class="progress" id="pack-progress"></span>
+      <button class="btn ghost" onclick="resetPacking()">↺ Reset checklist</button>
+    </div>
+    <div class="packing-grid" id="packing-grid"></div>
+    <div class="add-section-row">
+      <input type="text" id="new-section-name" placeholder="New section (e.g. Beach stuff)">
+      <button class="btn subtle" onclick="addSection()">+ Section</button>
+    </div>
+  </section>
+
+  <!-- OUTFITS -->
+  <section class="tab" id="tab-outfits">
+    <div style="margin-bottom:4px">
+      <h2 class="section-title">Outfits</h2>
+      <p class="section-sub">Plan what to wear each day with photos.</p>
+    </div>
+    <div class="outfit-toolbar">
+      <input type="text" id="new-outfit-day" placeholder="Day label (e.g. Day 1 — Beach)">
+      <button class="btn" onclick="addOutfit()">+ Add day</button>
+    </div>
+    <div class="outfit-grid" id="outfit-grid"></div>
+    <div class="empty-note" id="outfits-empty" style="display:none">No outfit days yet — add one above, then attach photos.</div>
+  </section>
+
+</main>
+
+<div id="error-banner"></div>
+<div id="lightbox" onclick="this.classList.remove('open')"><img id="lightbox-img" alt=""></div>
+<input type="file" id="pic-input" accept="image/*" multiple style="display:none">
+
+<script>
+/* ============ error visibility ============ */
+window.addEventListener('error', (e) => {
+  const b = document.getElementById('error-banner');
+  if (b) { b.textContent = '⚠️ Something went wrong: ' + (e.message || 'unknown error'); b.style.display = 'block'; }
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const b = document.getElementById('error-banner');
+  if (b) { b.textContent = '⚠️ Something went wrong: ' + (e.reason?.message || e.reason || 'unknown error'); b.style.display = 'block'; }
+});
+
+/* ============ state & persistence ============ */
+const LS_KEY = 'tripplanner.v2';
+
+const TRIP_EMOJI = ['🌴','🗼','🏖️','⛩️','🏔️','🎡','🌋','🏰','🛶','🌉'];
+
+const defaultTrip = (name) => ({
+  id: uid(),
+  name,
+  emoji: TRIP_EMOJI[Math.floor(Math.random() * TRIP_EMOJI.length)],
+  places: [],
+  myMaps: '',
+  selectedPlaceId: null,
+  showMyMaps: false,
+  itinerary: [],
+  packing: [
+    { id: uid(), name: 'Day Of', items: mkItems(['Passport / ID', 'Boarding passes', 'Wallet', 'Phone + charger', 'Headphones', 'Snacks', 'Water bottle']) },
+    { id: uid(), name: 'Clothes', items: mkItems(['Tops', 'Bottoms', 'Underwear', 'Socks', 'Pajamas', 'Jacket', 'Shoes']) },
+    { id: uid(), name: 'Accessories', items: mkItems(['Sunglasses', 'Jewelry', 'Belt', 'Hat', 'Day bag']) },
+    { id: uid(), name: 'Toiletries', items: mkItems(['Toothbrush + toothpaste', 'Skincare', 'Deodorant', 'Hairbrush', 'Medications']) },
+    { id: uid(), name: 'Other', items: mkItems(['Chargers / adapters', 'Camera', 'Book', 'Umbrella', 'Laundry bag']) },
+  ],
+  outfits: [],
+  activeTab: 'places',
+});
+
+const defaultState = () => ({ trips: [], activeTripId: null });
+
+function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+function mkItems(arr) { return arr.map(t => ({ id: uid(), text: t, checked: false })); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let state = null;
+try { state = JSON.parse(localStorage.getItem(LS_KEY)); } catch {}
+if (!state || !Array.isArray(state.trips)) {
+  state = defaultState();
+  // migrate single-trip data from the old version, if any
+  let old = null;
+  try { old = JSON.parse(localStorage.getItem('tripplanner.v1')); } catch {}
+  if (old && typeof old === 'object') {
+    const t = Object.assign(defaultTrip('My Trip'), old, { id: uid(), name: 'My Trip' });
+    delete t.trips; delete t.activeTripId;
+    state.trips.push(t);
+    localStorage.removeItem('tripplanner.v1');
+  }
+  save();
+}
+
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+/* ============ trips ============ */
+let T = null; // currently open trip
+
+function getTrip(id) { return state.trips.find(t => t.id === id); }
+function addTrip() {
+  const input = document.getElementById('new-trip-name');
+  const name = input.value.trim();
+  if (!name) {
+    input.placeholder = 'Give your trip a name first ✏️';
+    input.classList.remove('needs-name');
+    void input.offsetWidth; // restart the shake animation on repeat clicks
+    input.classList.add('needs-name');
+    input.focus();
+    input.addEventListener('input', () => {
+      input.classList.remove('needs-name');
+      input.placeholder = 'New trip (e.g. Paris — June 2027)';
+    }, { once: true });
+    return;
+  }
+  const t = defaultTrip(name);
+  state.trips.push(t);
+  input.value = '';
+  save();
+  openTrip(t.id);
+}
+function openTrip(id) {
+  const t = getTrip(id);
+  if (!t) return;
+  T = t;
+  state.activeTripId = id;
+  save();
+  document.body.classList.add('in-trip');
+  document.getElementById('header-title').innerHTML = `${esc(t.emoji)} <span>${esc(t.name)}</span>`;
+  document.getElementById('header-sub').textContent = 'Places · Itinerary · Packing · Outfits';
+  renderPlaces(); renderItinerary(); renderPacking(); renderOutfits();
+  switchTab(T.activeTab || 'places');
+}
+function closeTrip() {
+  T = null;
+  state.activeTripId = null;
+  save();
+  document.body.classList.remove('in-trip');
+  document.getElementById('header-title').innerHTML = '✈️ Trip <span>Planner</span>';
+  document.getElementById('header-sub').textContent = 'Pick a trip or start a new one — everything saves automatically in this browser';
+  renderHome();
+}
+function renameTrip(id) {
+  const t = getTrip(id);
+  if (!t) return;
+  const n = prompt('Trip name:', t.name);
+  if (n === null || !n.trim()) return;
+  t.name = n.trim();
+  save(); renderHome();
+}
+function deleteTrip(id) {
+  const t = getTrip(id);
+  if (!t) return;
+  if (!confirm(`Delete "${t.name}" and everything in it (places, itinerary, packing, outfit photos)?`)) return;
+  t.outfits.forEach(o => o.imageIds.forEach(imgId => { idbDel(imgId); delete imageCache[imgId]; }));
+  state.trips = state.trips.filter(x => x.id !== id);
+  save(); renderHome();
+}
+function renderHome() {
+  const grid = document.getElementById('trip-grid');
+  document.getElementById('trips-empty').style.display = state.trips.length ? 'none' : '';
+  grid.innerHTML = state.trips.map(t => {
+    const packed = t.packing.flatMap(s => s.items);
+    const done = packed.filter(i => i.checked).length;
+    const stats = [
+      `${t.places.length} place${t.places.length === 1 ? '' : 's'}`,
+      `${t.itinerary.length} day${t.itinerary.length === 1 ? '' : 's'}`,
+      packed.length ? `${done}/${packed.length} packed` : null,
+      `${t.outfits.length} outfit${t.outfits.length === 1 ? '' : 's'}`,
+    ].filter(Boolean).join(' · ');
+    return `
+    <div class="card trip-card" onclick="openTrip('${t.id}')">
+      <span class="t-emoji">${esc(t.emoji)}</span>
+      <div class="grow">
+        <div class="t-name">${esc(t.name)}</div>
+        <div class="t-stats">${stats}</div>
+      </div>
+      <button class="icon-btn" title="Rename trip" onclick="event.stopPropagation(); renameTrip('${t.id}')">✎</button>
+      <button class="icon-btn danger" title="Delete trip" onclick="event.stopPropagation(); deleteTrip('${t.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+/* ============ IndexedDB for outfit photos ============ */
+let db;
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('tripplanner-images', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('images');
+    r.onsuccess = () => { db = r.result; res(); };
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPut(id, data) {
+  if (!db) return Promise.reject(new Error('Photo storage is unavailable in this browser'));
+  return new Promise((res, rej) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').put(data, id);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+function idbGet(id) {
+  if (!db) return Promise.resolve(null);
+  return new Promise((res, rej) => {
+    const r = db.transaction('images').objectStore('images').get(id);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+function idbDel(id) {
+  if (!db) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').delete(id);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+const imageCache = {};
+async function getImage(id) {
+  if (!imageCache[id]) imageCache[id] = await idbGet(id);
+  return imageCache[id];
+}
+function compressImage(file, maxDim = 1000, quality = 0.82) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      res(canvas.toDataURL('image/jpeg', quality));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* ============ tabs ============ */
+function switchTab(name) {
+  if (T) { T.activeTab = name; save(); }
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  if (name === 'places' && osmMap) setTimeout(() => { osmMap.invalidateSize(); }, 50);
+}
+document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+/* ============ PLACES ============ */
+function addPlace() {
+  const name = document.getElementById('place-name').value.trim();
+  const query = document.getElementById('place-query').value.trim();
+  if (!name && !query) return;
+  const p = { id: uid(), name: name || query, query: query || name };
+  T.places.push(p);
+  T.selectedPlaceId = p.id;
+  T.showMyMaps = false;
+  document.getElementById('place-name').value = '';
+  document.getElementById('place-query').value = '';
+  save(); renderPlaces(); renderItinerary();
+}
+function deletePlace(id) {
+  if (!confirm('Delete this place?')) return;
+  T.places = T.places.filter(p => p.id !== id);
+  if (T.selectedPlaceId === id) T.selectedPlaceId = null;
+  T.itinerary.forEach(d => d.placeIds = d.placeIds.filter(pid => pid !== id));
+  save(); renderPlaces(); renderItinerary();
+}
+function editPlace(id) {
+  const p = T.places.find(p => p.id === id);
+  if (!p) return;
+  const name = prompt('Place name:', p.name);
+  if (name === null) return;
+  const query = prompt('Address / map search:', p.query);
+  if (query === null) return;
+  p.name = name.trim() || p.name;
+  p.query = query.trim() || p.query;
+  p.lat = p.lon = null; p.geoFailed = false; // re-locate on the map
+  save(); renderPlaces(); renderItinerary();
+}
+function selectPlace(id) {
+  T.selectedPlaceId = id;
+  T.showMyMaps = false;
+  save(); renderPlaces();
+}
+function extractMyMapsMid(url) {
+  const m = String(url).match(/[?&]mid=([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function saveMyMaps() {
+  const val = document.getElementById('mymaps-input').value.trim();
+  if (val && !extractMyMapsMid(val)) {
+    alert('That doesn\'t look like a Google My Maps link. It should contain "mid=..." — open your map at google.com/maps/d/ and copy the share link.');
+    return;
+  }
+  T.myMaps = val;
+  T.showMyMaps = !!val;
+  save(); renderPlaces();
+}
+function toggleMyMaps() {
+  T.showMyMaps = !T.showMyMaps;
+  save(); renderPlaces();
+}
+/* all-pins map (OpenStreetMap via Leaflet — free, no key) */
+let osmMap = null, osmMarkers = null;
+function ensureOsm() {
+  if (osmMap) return osmMap;
+  if (typeof L === 'undefined') return null; // Leaflet CDN unavailable (offline)
+  osmMap = L.map('map-osm', { scrollWheelZoom: true });
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(osmMap);
+  osmMarkers = L.layerGroup().addTo(osmMap);
+  return osmMap;
+}
+function drawPins(sel) {
+  const map = ensureOsm();
+  if (!map) return;
+  osmMarkers.clearLayers();
+  const located = T.places.filter(p => p.lat != null);
+  for (const p of located) {
+    const m = L.marker([p.lat, p.lon]).addTo(osmMarkers);
+    m.bindPopup(`<b>${esc(p.name)}</b><br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.query)}" target="_blank">Open in Google Maps</a>`);
+    m.on('click', () => { T.selectedPlaceId = p.id; save(); });
+    if (sel && sel.id === p.id) setTimeout(() => m.openPopup(), 150);
+  }
+  setTimeout(() => map.invalidateSize(), 30);
+  if (sel && sel.lat != null) map.setView([sel.lat, sel.lon], 15);
+  else if (located.length > 1) map.fitBounds(located.map(p => [p.lat, p.lon]), { padding: [40, 40] });
+  else if (located.length === 1) map.setView([located[0].lat, located[0].lon], 14);
+  else map.setView([20, 0], 2);
+}
+let geoBusy = false;
+async function geocodeMissing() {
+  if (geoBusy || !T) return;
+  const p = T.places.find(x => x.lat == null && !x.geoFailed);
+  if (!p) return;
+  geoBusy = true;
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(p.query));
+    const j = await r.json();
+    if (j && j[0]) { p.lat = Number(j[0].lat); p.lon = Number(j[0].lon); }
+    else { p.geoFailed = true; }
+  } catch (e) {
+    p.geoFailed = true; // editing the place retries
+    console.error('geocode failed', e);
+  }
+  save();
+  geoBusy = false;
+  const more = T && T.places.some(x => x.lat == null && !x.geoFailed);
+  renderPlaces();
+  if (more) setTimeout(geocodeMissing, 1100); // be polite to the free geocoder
+}
+
+function renderPlaces() {
+  const list = document.getElementById('place-list');
+  if (!T.places.length) {
+    list.innerHTML = '<div class="empty-note">No places yet — add your first spot above.</div>';
+  } else {
+    list.innerHTML = T.places.map(p => `
+      <div class="place-item ${p.id === T.selectedPlaceId && !T.showMyMaps ? 'selected' : ''}" onclick="selectPlace('${p.id}')">
+        <div style="flex:1; min-width:0">
+          <span class="p-name">${esc(p.name)}</span>
+          <span class="p-query">${esc(p.query)}${p.lat == null ? (p.geoFailed ? ' · ⚠️ not found on map — try a fuller address' : ' · 📍 locating…') : ''}</span>
+        </div>
+        <button class="icon-btn" title="Edit" onclick="event.stopPropagation(); editPlace('${p.id}')">✎</button>
+        <button class="icon-btn danger" title="Delete" onclick="event.stopPropagation(); deletePlace('${p.id}')">✕</button>
+      </div>`).join('');
+  }
+
+  const frame = document.getElementById('map-frame');
+  const osmDiv = document.getElementById('map-osm');
+  const openLink = document.getElementById('open-gmaps');
+  const title = document.getElementById('map-title');
+  const toggle = document.getElementById('mymaps-toggle');
+  const mid = extractMyMapsMid(T.myMaps);
+  document.getElementById('mymaps-input').value = T.myMaps || '';
+
+  toggle.style.display = mid ? '' : 'none';
+
+  if (T.showMyMaps && mid) {
+    osmDiv.style.display = 'none';
+    frame.style.display = '';
+    frame.src = 'https://www.google.com/maps/d/embed?mid=' + mid;
+    title.textContent = 'My Google map';
+    toggle.textContent = 'Show my pins';
+    openLink.style.display = '';
+    openLink.href = 'https://www.google.com/maps/d/viewer?mid=' + mid;
+    return;
+  }
+  toggle.textContent = 'Show my Google map';
+
+  frame.style.display = 'none';
+  frame.removeAttribute('src');
+  osmDiv.style.display = '';
+  const sel = T.places.find(p => p.id === T.selectedPlaceId);
+  title.textContent = sel ? sel.name : (T.places.length ? 'All places' : 'Map');
+  if (sel) {
+    openLink.style.display = '';
+    openLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(sel.query);
+  } else {
+    openLink.style.display = 'none';
+  }
+  drawPins(sel);
+  geocodeMissing();
+}
+
+/* ============ ITINERARY ============ */
+function addDay() {
+  const n = T.itinerary.length + 1;
+  T.itinerary.push({ id: uid(), date: '', title: 'Day ' + n, notes: '', placeIds: [] });
+  save(); renderItinerary();
+}
+function deleteDay(id) {
+  if (!confirm('Delete this day and its notes?')) return;
+  T.itinerary = T.itinerary.filter(d => d.id !== id);
+  save(); renderItinerary();
+}
+function updateDay(id, field, value) {
+  const d = T.itinerary.find(d => d.id === id);
+  if (d) { d[field] = value; save(); }
+}
+function linkPlace(dayId, placeId) {
+  if (!placeId) return;
+  const d = T.itinerary.find(d => d.id === dayId);
+  if (d && !d.placeIds.includes(placeId)) { d.placeIds.push(placeId); save(); renderItinerary(); }
+}
+function unlinkPlace(dayId, placeId) {
+  const d = T.itinerary.find(d => d.id === dayId);
+  if (d) { d.placeIds = d.placeIds.filter(p => p !== placeId); save(); renderItinerary(); }
+}
+function goToPlace(placeId) {
+  selectPlace(placeId);
+  switchTab('places');
+}
+function renderItinerary() {
+  const wrap = document.getElementById('day-list');
+  document.getElementById('itinerary-empty').style.display = T.itinerary.length ? 'none' : '';
+  wrap.innerHTML = T.itinerary.map(d => {
+    const chips = d.placeIds.map(pid => {
+      const p = T.places.find(p => p.id === pid);
+      if (!p) return '';
+      return `<span class="chip" onclick="goToPlace('${pid}')" title="View on map">📍 ${esc(p.name)}
+        <span class="x" onclick="event.stopPropagation(); unlinkPlace('${d.id}','${pid}')">✕</span></span>`;
+    }).join('');
+    const options = T.places
+      .filter(p => !d.placeIds.includes(p.id))
+      .map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    return `
+    <div class="card day-card">
+      <div class="day-head">
+        <input type="date" value="${esc(d.date)}" onchange="updateDay('${d.id}','date',this.value)">
+        <input type="text" class="day-title" value="${esc(d.title)}" placeholder="Day title"
+          oninput="updateDay('${d.id}','title',this.value)">
+        <button class="icon-btn danger" title="Delete day" onclick="deleteDay('${d.id}')">✕</button>
+      </div>
+      <textarea placeholder="Notes for this day — plans, times, reservations…"
+        oninput="updateDay('${d.id}','notes',this.value)">${esc(d.notes)}</textarea>
+      <div class="chips">
+        ${chips}
+        ${T.places.length ? `
+        <select onchange="linkPlace('${d.id}', this.value); this.value=''">
+          <option value="">+ link a place</option>
+          ${options}
+        </select>` : `<span style="font-size:12px;color:var(--muted)">Add places in the Places tab to link them here</span>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============ PACKING ============ */
+function renderPacking() {
+  const grid = document.getElementById('packing-grid');
+  grid.innerHTML = T.packing.map(sec => {
+    const done = sec.items.filter(i => i.checked).length;
+    return `
+    <div class="card pack-section">
+      <h3>
+        ${esc(sec.name)} <span class="count">${done}/${sec.items.length}</span>
+        <span class="grow"></span>
+        <button class="icon-btn" title="Rename section" onclick="renameSection('${sec.id}')">✎</button>
+        <button class="icon-btn danger" title="Delete section" onclick="deleteSection('${sec.id}')">✕</button>
+      </h3>
+      <div class="pack-items">
+        ${sec.items.map(it => `
+        <div class="pack-item ${it.checked ? 'done' : ''}">
+          <input type="checkbox" id="chk-${it.id}" ${it.checked ? 'checked' : ''}
+            onchange="toggleItem('${sec.id}','${it.id}')">
+          <label for="chk-${it.id}">${esc(it.text)}</label>
+          <span class="row-actions">
+            <button class="icon-btn" title="Edit" onclick="editItem('${sec.id}','${it.id}')">✎</button>
+            <button class="icon-btn danger" title="Delete" onclick="deleteItem('${sec.id}','${it.id}')">✕</button>
+          </span>
+        </div>`).join('')}
+      </div>
+      <div class="add-item-row">
+        <input type="text" placeholder="Add item…" onkeydown="if(event.key==='Enter'){addItem('${sec.id}',this)}">
+        <button class="btn subtle" onclick="addItem('${sec.id}', this.previousElementSibling)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+  const all = T.packing.flatMap(s => s.items);
+  const done = all.filter(i => i.checked).length;
+  document.getElementById('pack-progress').textContent = all.length ? `${done} / ${all.length} packed` : '';
+}
+function toggleItem(secId, itemId) {
+  const it = T.packing.find(s => s.id === secId)?.items.find(i => i.id === itemId);
+  if (it) { it.checked = !it.checked; save(); renderPacking(); }
+}
+function addItem(secId, input) {
+  const text = input.value.trim();
+  if (!text) return;
+  T.packing.find(s => s.id === secId)?.items.push({ id: uid(), text, checked: false });
+  save(); renderPacking();
+}
+function editItem(secId, itemId) {
+  const it = T.packing.find(s => s.id === secId)?.items.find(i => i.id === itemId);
+  if (!it) return;
+  const t = prompt('Edit item:', it.text);
+  if (t === null || !t.trim()) return;
+  it.text = t.trim(); save(); renderPacking();
+}
+function deleteItem(secId, itemId) {
+  const sec = T.packing.find(s => s.id === secId);
+  if (sec) { sec.items = sec.items.filter(i => i.id !== itemId); save(); renderPacking(); }
+}
+function addSection() {
+  const input = document.getElementById('new-section-name');
+  const name = input.value.trim();
+  if (!name) return;
+  T.packing.push({ id: uid(), name, items: [] });
+  input.value = '';
+  save(); renderPacking();
+}
+function renameSection(id) {
+  const sec = T.packing.find(s => s.id === id);
+  if (!sec) return;
+  const n = prompt('Section name:', sec.name);
+  if (n === null || !n.trim()) return;
+  sec.name = n.trim(); save(); renderPacking();
+}
+function deleteSection(id) {
+  const sec = T.packing.find(s => s.id === id);
+  if (!sec) return;
+  if (!confirm(`Delete section "${sec.name}" and all its items?`)) return;
+  T.packing = T.packing.filter(s => s.id !== id);
+  save(); renderPacking();
+}
+function resetPacking() {
+  if (!confirm('Uncheck everything? Your items stay — only the checkmarks reset.')) return;
+  T.packing.forEach(s => s.items.forEach(i => i.checked = false));
+  save(); renderPacking();
+}
+
+/* ============ OUTFITS ============ */
+let picTargetOutfit = null;
+const picInput = document.getElementById('pic-input');
+picInput.addEventListener('change', async () => {
+  const outfit = T.outfits.find(o => o.id === picTargetOutfit);
+  if (!outfit) return;
+  for (const file of picInput.files) {
+    try {
+      const dataUrl = await compressImage(file);
+      const imgId = uid();
+      await idbPut(imgId, dataUrl);
+      imageCache[imgId] = dataUrl;
+      outfit.imageIds.push(imgId);
+    } catch (e) { console.error('image failed', e); }
+  }
+  picInput.value = '';
+  save(); renderOutfits();
+});
+
+function addOutfit() {
+  const input = document.getElementById('new-outfit-day');
+  const day = input.value.trim() || 'Day ' + (T.outfits.length + 1);
+  T.outfits.push({ id: uid(), day, note: '', imageIds: [] });
+  input.value = '';
+  save(); renderOutfits();
+}
+function deleteOutfit(id) {
+  const o = T.outfits.find(o => o.id === id);
+  if (!o) return;
+  if (!confirm(`Delete outfit "${o.day}" and its photos?`)) return;
+  o.imageIds.forEach(imgId => idbDel(imgId));
+  T.outfits = T.outfits.filter(x => x.id !== id);
+  save(); renderOutfits();
+}
+function renameOutfit(id) {
+  const o = T.outfits.find(o => o.id === id);
+  if (!o) return;
+  const n = prompt('Day label:', o.day);
+  if (n === null || !n.trim()) return;
+  o.day = n.trim(); save(); renderOutfits();
+}
+function updateOutfitNote(id, val) {
+  const o = T.outfits.find(o => o.id === id);
+  if (o) { o.note = val; save(); }
+}
+function addPics(outfitId) {
+  picTargetOutfit = outfitId;
+  picInput.click();
+}
+async function deletePic(outfitId, imgId) {
+  const o = T.outfits.find(o => o.id === outfitId);
+  if (!o) return;
+  o.imageIds = o.imageIds.filter(i => i !== imgId);
+  await idbDel(imgId);
+  delete imageCache[imgId];
+  save(); renderOutfits();
+}
+async function openLightbox(imgId) {
+  const data = await getImage(imgId);
+  if (!data) return;
+  document.getElementById('lightbox-img').src = data;
+  document.getElementById('lightbox').classList.add('open');
+}
+function renderOutfits() {
+  const grid = document.getElementById('outfit-grid');
+  document.getElementById('outfits-empty').style.display = T.outfits.length ? 'none' : '';
+  grid.innerHTML = T.outfits.map(o => `
+    <div class="card outfit-card">
+      <h3>👗 ${esc(o.day)}
+        <span class="grow"></span>
+        <button class="icon-btn" title="Rename" onclick="renameOutfit('${o.id}')">✎</button>
+        <button class="icon-btn danger" title="Delete" onclick="deleteOutfit('${o.id}')">✕</button>
+      </h3>
+      <div class="outfit-pics">
+        ${o.imageIds.map(imgId => `
+          <div class="thumb">
+            <img data-img="${imgId}" alt="outfit photo" onclick="openLightbox('${imgId}')">
+            <button class="del" title="Remove photo" onclick="deletePic('${o.id}','${imgId}')">✕</button>
+          </div>`).join('')}
+        <button class="add-pic" title="Add photos" onclick="addPics('${o.id}')">+</button>
+      </div>
+      <div class="outfit-note">
+        <textarea placeholder="Notes — shoes, bag, weather…"
+          oninput="updateOutfitNote('${o.id}', this.value)">${esc(o.note)}</textarea>
+      </div>
+    </div>`).join('');
+  // hydrate images from IndexedDB
+  grid.querySelectorAll('img[data-img]').forEach(async img => {
+    const data = await getImage(img.dataset.img);
+    if (data) img.src = data;
+  });
+}
+
+/* ============ init ============ */
+openDB().catch((err) => { console.error('IndexedDB unavailable, photos disabled:', err); }).then(() => {
+  renderHome();
+  if (state.activeTripId && getTrip(state.activeTripId)) {
+    openTrip(state.activeTripId);
+  } else {
+    state.activeTripId = null;
+    save();
+  }
+});
+</script>
+</body>
+</html>
