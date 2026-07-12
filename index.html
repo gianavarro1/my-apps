@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Apps</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #faf6f0; color: #2b2a28; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 24px;
+  }
+  h1 { font-size: 26px; }
+  .apps { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  a.app {
+    display: block; text-decoration: none; color: inherit;
+    background: #fff; border: 1px solid #eee7dc; border-radius: 18px;
+    box-shadow: 0 2px 10px rgba(60,50,40,.06);
+    padding: 26px 30px; text-align: center; width: 220px;
+    transition: transform .12s;
+  }
+  a.app:hover { transform: translateY(-3px); }
+  a.app .emoji { font-size: 40px; }
+  a.app b { display: block; margin-top: 10px; font-size: 17px; }
+  a.app span { color: #8a857d; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>✨ My Apps</h1>
+  <div class="apps">
+    <a class="app" href="travel-app/">
+      <div class="emoji">✈️</div>
+      <b>Trip Planner</b>
+      <span>Places · Itinerary · Packing · Outfits</span>
+    </a>
+    <a class="app" href="fitness-app/">
+      <div class="emoji">💪</div>
+      <b>FitCoach</b>
+      <span>AI calorie & workout tracker</span>
+    </a>
+  </div>
+</body>
+</html>
