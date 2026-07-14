@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Digest</title>
+<style>
+  :root {
+    --bg: #f7f4ec;
+    --card: #ffffff;
+    --ink: #1c1a15;
+    --muted: #6f6a5e;
+    --line: #e4dfd2;
+    --accent: #9a3b2e;
+    --accent-soft: #f3e3df;
+    --context-bg: #f1ede1;
+    --pill: #efe9da;
+    --shadow: 0 1px 3px rgba(30,25,10,.07), 0 4px 14px rgba(30,25,10,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16150f;
+      --card: #201e17;
+      --ink: #ece7da;
+      --muted: #9a9485;
+      --line: #35322a;
+      --accent: #e08a76;
+      --accent-soft: #3a2721;
+      --context-bg: #262419;
+      --pill: #2c2a20;
+      --shadow: 0 1px 3px rgba(0,0,0,.4);
+      --btn-ink: #241109;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.55;
+    padding-bottom: 80px;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 20px; }
+
+  header {
+    border-bottom: 3px double var(--line);
+    padding: 28px 0 18px;
+    margin-bottom: 8px;
+  }
+  .masthead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 2.1rem;
+    letter-spacing: -0.5px;
+    font-weight: 700;
+  }
+  h1 .tilde { color: var(--accent); }
+  .dateline { color: var(--muted); font-size: .9rem; }
+  .toolbar { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: .88rem;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--btn-ink, #fff); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .updated { color: var(--muted); font-size: .8rem; margin-left: auto; }
+
+  /* section nav */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .chips a {
+    text-decoration: none; color: var(--ink);
+    background: var(--pill); border-radius: 99px;
+    padding: 4px 12px; font-size: .8rem;
+  }
+  .chips a:hover { background: var(--accent-soft); }
+
+  h2.section {
+    font-family: Georgia, serif;
+    font-size: 1.35rem;
+    margin: 34px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--ink);
+    scroll-margin-top: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin-top: 14px;
+  }
+  .card h3 {
+    font-family: Georgia, serif;
+    font-size: 1.12rem;
+    line-height: 1.35;
+    margin-bottom: 10px;
+  }
+  ul.bullets { list-style: none; }
+  ul.bullets li {
+    padding-left: 18px;
+    position: relative;
+    margin-bottom: 7px;
+    font-size: .93rem;
+  }
+  ul.bullets li::before {
+    content: "";
+    position: absolute; left: 2px; top: .55em;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .context {
+    background: var(--context-bg);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 12px;
+  }
+  .context .label {
+    font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .context ul.bullets li::before { background: var(--muted); }
+  .sources { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .sources a {
+    font-size: .75rem; text-decoration: none;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 99px; padding: 3px 10px;
+  }
+  .sources a:hover { text-decoration: underline; }
+
+  /* loading */
+  #loading { text-align: center; padding: 60px 0 20px; }
+  .spinner {
+    width: 34px; height: 34px; margin: 0 auto 18px;
+    border: 3px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #statusLog { color: var(--muted); font-size: .88rem; }
+  #statusLog div { margin-top: 4px; }
+  #statusLog .active { color: var(--ink); font-weight: 600; }
+
+  /* empty / error */
+  .notice { text-align: center; padding: 70px 20px; color: var(--muted); }
+  .notice h3 { font-family: Georgia, serif; color: var(--ink); margin-bottom: 8px; font-size: 1.3rem; }
+  .error {
+    background: var(--accent-soft); color: var(--ink);
+    border: 1px solid var(--accent);
+    border-radius: 10px; padding: 14px 16px; margin-top: 20px;
+    font-size: .9rem; white-space: pre-wrap;
+  }
+
+  /* settings modal */
+  #overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+    padding: 20px;
+  }
+  #overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 14px;
+    max-width: 460px; width: 100%;
+    padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,.3);
+  }
+  .modal h3 { font-family: Georgia, serif; margin-bottom: 14px; }
+  .modal label.field { display: block; font-size: .82rem; font-weight: 600; margin: 14px 0 4px; }
+  .modal input[type=password], .modal input[type=text] {
+    width: 100%; font: inherit; font-size: .88rem;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink);
+  }
+  .modal .hint { font-size: .76rem; color: var(--muted); margin-top: 5px; }
+  .modal .hint a { color: var(--accent); }
+  .secs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+  .secs label { font-size: .87rem; display: flex; gap: 7px; align-items: center; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="masthead">
+      <h1><span class="tilde">~</span> Daily Digest</h1>
+      <div class="dateline" id="dateline"></div>
+    </div>
+    <div class="toolbar">
+      <button class="primary" id="btnGenerate">Get today's digest</button>
+      <button id="btnSettings">Settings</button>
+      <span class="updated" id="updated"></span>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div id="loading" style="display:none">
+    <div class="spinner"></div>
+    <div id="statusLog"></div>
+  </div>
+
+  <div id="content"></div>
+</div>
+
+<div id="overlay">
+  <div class="modal">
+    <h3>Settings</h3>
+    <label class="field" for="apiKey">Anthropic API key</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-...">
+    <div class="hint">Stored only in this browser (localStorage). Get a key at
+      <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a>.
+      Each digest uses web search + Claude, so it costs a small amount per run.</div>
+    <label class="field">Sections</label>
+    <div class="secs" id="secChecks"></div>
+    <label class="field" for="customTopics">Custom topics</label>
+    <input type="text" id="customTopics" placeholder="e.g. Formula 1, NYC real estate, K-pop">
+    <div class="hint">Comma-separated — each becomes its own section. More sections = a slower, slightly pricier run.</div>
+    <div class="actions">
+      <button id="btnCancel">Cancel</button>
+      <button class="primary" id="btnSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SECTIONS = [
+  { id: 'politics', label: 'US Politics' },
+  { id: 'foreign',  label: 'Foreign Affairs' },
+  { id: 'business', label: 'Business & Markets' },
+  { id: 'consumer', label: 'Consumer & Industry' },
+  { id: 'tech',     label: 'Tech & Science' },
+  { id: 'ai',       label: 'AI' },
+  { id: 'health',   label: 'Health & Medicine' },
+  { id: 'climate',  label: 'Climate & Energy' },
+  { id: 'crypto',   label: 'Crypto & Fintech' },
+  { id: 'sports',   label: 'Sports' },
+  { id: 'culture',  label: 'Entertainment & Culture' },
+];
+const DEFAULT_SECTIONS = ['politics', 'foreign', 'business', 'consumer', 'tech'];
+
+const $ = (id) => document.getElementById(id);
+const store = {
+  get key() { return localStorage.getItem('dd_api_key') || ''; },
+  set key(v) { localStorage.setItem('dd_api_key', v); },
+  get sections() {
+    try {
+      const s = JSON.parse(localStorage.getItem('dd_sections'));
+      if (Array.isArray(s)) return s; // empty is valid when custom topics are set
+    } catch (e) {}
+    return DEFAULT_SECTIONS.slice();
+  },
+  set sections(v) { localStorage.setItem('dd_sections', JSON.stringify(v)); },
+  get custom() { return localStorage.getItem('dd_custom') || ''; },
+  set custom(v) { localStorage.setItem('dd_custom', v); },
+  get cache() {
+    try { return JSON.parse(localStorage.getItem('dd_digest')); } catch (e) { return null; }
+  },
+  set cache(v) { localStorage.setItem('dd_digest', JSON.stringify(v)); },
+};
+
+function todayStr() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ---------- rendering ----------
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s ?? '');
+  return d.innerHTML;
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return null; }
+}
+
+function renderDigest(data) {
+  const chips = $('chips');
+  chips.innerHTML = '';
+  const content = $('content');
+  content.innerHTML = '';
+  (data.sections || []).forEach((sec, i) => {
+    const a = document.createElement('a');
+    a.href = '#sec-' + i;
+    a.textContent = sec.name;
+    chips.appendChild(a);
+
+    const h2 = document.createElement('h2');
+    h2.className = 'section';
+    h2.id = 'sec-' + i;
+    h2.textContent = sec.name;
+    content.appendChild(h2);
+
+    (sec.stories || []).forEach(story => {
+      const bullets = (story.bullets || []).map(b => `<li>${esc(b)}</li>`).join('');
+      const ctx = (story.context || []).map(b => `<li>${esc(b)}</li>`).join('');
+      const sources = (story.sources || [])
+        .filter(s => s && s.url && hostOf(s.url))
+        .map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name || hostOf(s.url))}</a>`)
+        .join('');
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${esc(story.headline)}</h3>
+        <ul class="bullets">${bullets}</ul>
+        ${ctx ? `<div class="context"><div class="label">Context &amp; background</div><ul class="bullets">${ctx}</ul></div>` : ''}
+        ${sources ? `<div class="sources">${sources}</div>` : ''}`;
+      content.appendChild(card);
+    });
+  });
+}
+
+function showNotice(html) {
+  $('chips').innerHTML = '';
+  $('content').innerHTML = `<div class="notice">${html}</div>`;
+}
+
+function showError(msg) {
+  $('content').insertAdjacentHTML('afterbegin', `<div class="error">${esc(msg)}</div>`);
+}
+
+// ---------- prompt ----------
+function buildPrompt(sectionLabels) {
+  return `Today is ${todayStr()}. Create my daily news digest by searching the web for today's (and the last ~24 hours') most important stories.
+
+Sections to cover, in this order: ${sectionLabels.join(', ')}.
+
+For EACH section pick the 3 most significant stories (2 per section if more than 6 sections are listed). For niche/custom topics with little same-day news, cover the most notable developments of the past few days instead. For EACH story provide:
+- "headline": a clear, specific headline
+- "bullets": exactly 3 short bullet points on what happened (the news itself: who/what/numbers/quotes)
+- "context": exactly 3 short bullet points of background and context for someone who hasn't followed the topic (e.g., for an Iran story: the history of the standoff, what led up to this, why it matters / what could happen next)
+- "sources": 2-3 sources with real URLs taken from your search results, as {"name": "Reuters", "url": "https://..."}
+
+Search efficiently — roughly one broad search per section, plus follow-ups only where needed. Prefer reputable outlets (Reuters, AP, Bloomberg, FT, WSJ, BBC, NYT, Axios, Politico...). Do not invent URLs; only use URLs that appeared in search results.
+
+Your final message must be ONLY a single JSON object, no markdown fences, no commentary, in exactly this shape:
+{"sections":[{"name":"US Politics","stories":[{"headline":"...","bullets":["...","...","..."],"context":["...","...","..."],"sources":[{"name":"...","url":"..."}]}]}]}`;
+}
+
+// ---------- streaming API call ----------
+async function generate(force) {
+  const key = store.key;
+  if (!key) { openSettings(); return; }
+
+  const secIds = store.sections;
+  const labels = SECTIONS.filter(s => secIds.includes(s.id)).map(s => s.label).concat(customList());
+  if (!labels.length) { openSettings(); return; }
+  const cacheSig = todayKey() + '|' + secIds.join(',') + '|' + customList().join(',');
+
+  if (!force) {
+    const c = store.cache;
+    if (c && c.sig === cacheSig && c.data) {
+      renderDigest(c.data);
+      $('updated').textContent = 'Updated ' + new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return;
+    }
+  }
+
+  $('btnGenerate').disabled = true;
+  $('content').innerHTML = '';
+  $('chips').innerHTML = '';
+  $('updated').textContent = '';
+  $('loading').style.display = 'block';
+  const log = $('statusLog');
+  log.innerHTML = '';
+  let searchCount = 0;
+  const setStatus = (msg) => {
+    [...log.children].forEach(el => el.classList.remove('active'));
+    const line = document.createElement('div');
+    line.className = 'active';
+    line.textContent = msg;
+    log.appendChild(line);
+  };
+  const bumpSearch = () => {
+    searchCount++;
+    const last = log.lastElementChild;
+    if (last && last.dataset.kind === 'search') {
+      last.textContent = `Searching the web… (${searchCount} searches)`;
+    } else {
+      [...log.children].forEach(el => el.classList.remove('active'));
+      const line = document.createElement('div');
+      line.className = 'active';
+      line.dataset.kind = 'search';
+      line.textContent = 'Searching the web… (1 search)';
+      log.appendChild(line);
+    }
+  };
+
+  setStatus('Contacting Claude…');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-8',
+        max_tokens: 16000,
+        stream: true,
+        system: 'You are a sharp, neutral news editor writing a morning briefing for a busy reader. You are factual, specific, and concise. You always follow output format instructions exactly.',
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: Math.min(4 + labels.length * 2, 20) }],
+        messages: [{ role: 'user', content: buildPrompt(labels) }],
+      }),
+    });
+
+    if (!resp.ok) {
+      let detail = '';
+      try { detail = (await resp.json()).error?.message || ''; } catch (e) {}
+      if (resp.status === 401) throw new Error('Your API key was rejected (401). Check it in Settings.');
+      throw new Error(`API error ${resp.status}. ${detail}`);
+    }
+
+    // Parse SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let text = '';
+    let stopReason = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+        if (ev.type === 'content_block_start') {
+          const t = ev.content_block?.type;
+          if (t === 'server_tool_use') bumpSearch();
+          else if (t === 'web_search_tool_result') setStatus('Reading results…');
+          else if (t === 'text' && searchCount > 0) setStatus('Writing your digest…');
+        } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          text += ev.delta.text;
+        } else if (ev.type === 'message_delta') {
+          stopReason = ev.delta?.stop_reason || stopReason;
+        } else if (ev.type === 'error') {
+          throw new Error(ev.error?.message || 'Stream error');
+        }
+      }
+    }
+
+    if (stopReason === 'refusal') throw new Error('Claude declined this request. Try again.');
+    if (stopReason === 'pause_turn') throw new Error('The search ran long and paused. Hit "Get today’s digest" to try again (or trim sections in Settings).');
+    if (stopReason === 'max_tokens') throw new Error('The digest was cut off. Try fewer sections in Settings.');
+
+    const data = extractJSON(text);
+    if (!data || !Array.isArray(data.sections) || !data.sections.length) {
+      throw new Error('Could not read the digest from the response. Try again.');
+    }
+
+    store.cache = { sig: cacheSig, at: Date.now(), data };
+    renderDigest(data);
+    $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch (err) {
+    if (err instanceof TypeError) {
+      showError('Network error reaching api.anthropic.com — check your connection and try again.');
+    } else {
+      showError(err.message);
+    }
+  } finally {
+    $('loading').style.display = 'none';
+    $('btnGenerate').disabled = false;
+  }
+}
+
+function extractJSON(text) {
+  // The response should be a bare JSON object; be lenient about stray prose/fences.
+  const cleaned = text.replace(/```json|```/g, '');
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  for (let s = start; s !== -1 && s < end; s = cleaned.indexOf('{', s + 1)) {
+    try { return JSON.parse(cleaned.slice(s, end + 1)); } catch (e) {}
+  }
+  return null;
+}
+
+// ---------- settings ----------
+function openSettings() {
+  $('apiKey').value = store.key;
+  const box = $('secChecks');
+  box.innerHTML = '';
+  const chosen = store.sections;
+  SECTIONS.forEach(s => {
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="checkbox" value="${s.id}" ${chosen.includes(s.id) ? 'checked' : ''}> ${esc(s.label)}`;
+    box.appendChild(label);
+  });
+  $('customTopics').value = store.custom;
+  $('overlay').classList.add('open');
+}
+
+function customList() {
+  return store.custom.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function saveSettings() {
+  const key = $('apiKey').value.trim();
+  if (key) store.key = key;
+  const picked = [...document.querySelectorAll('#secChecks input:checked')].map(i => i.value);
+  const custom = $('customTopics').value.trim();
+  if (!picked.length && !custom) { alert('Pick at least one section or add a custom topic.'); return; }
+  store.sections = picked;
+  store.custom = custom;
+  $('overlay').classList.remove('open');
+  if (!$('content').children.length || !store.cache) init();
+}
+
+// ---------- init ----------
+function init() {
+  $('dateline').textContent = todayStr();
+  if (!store.key) {
+    showNotice(`<h3>Welcome to your Daily Digest</h3>
+      Add your Anthropic API key in <b>Settings</b>, pick your sections,<br>
+      then hit <b>Get today's digest</b>.`);
+    return;
+  }
+  const c = store.cache;
+  const cacheSig = todayKey() + '|' + store.sections.join(',') + '|' + customList().join(',');
+  if (c && c.sig === cacheSig && c.data) {
+    renderDigest(c.data);
+    $('updated').textContent = 'Updated ' + new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } else {
+    showNotice(`<h3>${todayStr()}</h3>Hit <b>Get today's digest</b> for a fresh briefing.`);
+  }
+}
+
+$('btnGenerate').addEventListener('click', () => generate(true));
+$('btnSettings').addEventListener('click', openSettings);
+$('btnCancel').addEventListener('click', () => $('overlay').classList.remove('open'));
+$('btnSave').addEventListener('click', saveSettings);
+$('overlay').addEventListener('click', (e) => { if (e.target === $('overlay')) $('overlay').classList.remove('open'); });
+
+init();
+</script>
+</body>
+</html>
