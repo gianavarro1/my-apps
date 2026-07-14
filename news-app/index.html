@@ -136,19 +136,22 @@
   }
   .sources a:hover { text-decoration: underline; }
 
-  /* loading */
-  #loading { text-align: center; padding: 60px 0 20px; }
-  .spinner {
-    width: 34px; height: 34px; margin: 0 auto 18px;
-    border: 3px solid var(--line);
+  /* per-section loading status */
+  .secstatus {
+    display: flex; gap: 10px; align-items: center;
+    color: var(--muted); font-size: .87rem;
+    padding: 16px 4px;
+  }
+  .mini {
+    flex: none;
+    width: 15px; height: 15px;
+    border: 2px solid var(--line);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #statusLog { color: var(--muted); font-size: .88rem; }
-  #statusLog div { margin-top: 4px; }
-  #statusLog .active { color: var(--ink); font-weight: 600; }
+  .secerror { color: var(--accent); font-size: .87rem; padding: 14px 4px; }
 
   /* empty / error */
   .notice { text-align: center; padding: 70px 20px; color: var(--muted); }
@@ -170,6 +173,7 @@
   .modal {
     background: var(--card); border-radius: 14px;
     max-width: 460px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
     padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,.3);
   }
   .modal h3 { font-family: Georgia, serif; margin-bottom: 14px; }
@@ -201,11 +205,6 @@
     <div class="chips" id="chips"></div>
   </header>
 
-  <div id="loading" style="display:none">
-    <div class="spinner"></div>
-    <div id="statusLog"></div>
-  </div>
-
   <div id="content"></div>
 </div>
 
@@ -221,7 +220,12 @@
     <div class="secs" id="secChecks"></div>
     <label class="field" for="customTopics">Custom topics</label>
     <input type="text" id="customTopics" placeholder="e.g. Formula 1, NYC real estate, K-pop">
-    <div class="hint">Comma-separated — each becomes its own section. More sections = a slower, slightly pricier run.</div>
+    <div class="hint">Comma-separated — each becomes its own section. Sections load in parallel, so more sections costs more but barely changes speed.</div>
+    <label class="field">Speed</label>
+    <div class="secs" id="speedOpts">
+      <label><input type="radio" name="speed" value="claude-sonnet-5"> Fast <span style="color:var(--muted)">(Sonnet 5)</span></label>
+      <label><input type="radio" name="speed" value="claude-opus-4-8"> Max quality <span style="color:var(--muted)">(Opus 4.8, slower)</span></label>
+    </div>
     <div class="actions">
       <button id="btnCancel">Cancel</button>
       <button class="primary" id="btnSave">Save</button>
@@ -244,6 +248,7 @@ const SECTIONS = [
   { id: 'culture',  label: 'Entertainment & Culture' },
 ];
 const DEFAULT_SECTIONS = ['politics', 'foreign', 'business', 'consumer', 'tech'];
+const DEFAULT_MODEL = 'claude-sonnet-5';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -259,6 +264,8 @@ const store = {
   set sections(v) { localStorage.setItem('dd_sections', JSON.stringify(v)); },
   get custom() { return localStorage.getItem('dd_custom') || ''; },
   set custom(v) { localStorage.setItem('dd_custom', v); },
+  get model() { return localStorage.getItem('dd_model') || DEFAULT_MODEL; },
+  set model(v) { localStorage.setItem('dd_model', v); },
   get cache() {
     try { return JSON.parse(localStorage.getItem('dd_digest')); } catch (e) { return null; }
   },
@@ -272,6 +279,16 @@ function todayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+function customList() {
+  return store.custom.split(',').map(s => s.trim()).filter(Boolean);
+}
+function currentLabels() {
+  const secIds = store.sections;
+  return SECTIONS.filter(s => secIds.includes(s.id)).map(s => s.label).concat(customList());
+}
+function cacheSig() {
+  return todayKey() + '|' + store.model + '|' + store.sections.join(',') + '|' + customList().join(',');
+}
 
 // ---------- rendering ----------
 function esc(s) {
@@ -284,6 +301,23 @@ function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return null; }
 }
 
+function storyCardsHTML(stories) {
+  return (stories || []).map(story => {
+    const bullets = (story.bullets || []).map(b => `<li>${esc(b)}</li>`).join('');
+    const ctx = (story.context || []).map(b => `<li>${esc(b)}</li>`).join('');
+    const sources = (story.sources || [])
+      .filter(s => s && s.url && hostOf(s.url))
+      .map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name || hostOf(s.url))}</a>`)
+      .join('');
+    return `<div class="card">
+      <h3>${esc(story.headline)}</h3>
+      <ul class="bullets">${bullets}</ul>
+      ${ctx ? `<div class="context"><div class="label">Context &amp; background</div><ul class="bullets">${ctx}</ul></div>` : ''}
+      ${sources ? `<div class="sources">${sources}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
 function renderDigest(data) {
   const chips = $('chips');
   chips.innerHTML = '';
@@ -294,29 +328,8 @@ function renderDigest(data) {
     a.href = '#sec-' + i;
     a.textContent = sec.name;
     chips.appendChild(a);
-
-    const h2 = document.createElement('h2');
-    h2.className = 'section';
-    h2.id = 'sec-' + i;
-    h2.textContent = sec.name;
-    content.appendChild(h2);
-
-    (sec.stories || []).forEach(story => {
-      const bullets = (story.bullets || []).map(b => `<li>${esc(b)}</li>`).join('');
-      const ctx = (story.context || []).map(b => `<li>${esc(b)}</li>`).join('');
-      const sources = (story.sources || [])
-        .filter(s => s && s.url && hostOf(s.url))
-        .map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name || hostOf(s.url))}</a>`)
-        .join('');
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <h3>${esc(story.headline)}</h3>
-        <ul class="bullets">${bullets}</ul>
-        ${ctx ? `<div class="context"><div class="label">Context &amp; background</div><ul class="bullets">${ctx}</ul></div>` : ''}
-        ${sources ? `<div class="sources">${sources}</div>` : ''}`;
-      content.appendChild(card);
-    });
+    content.insertAdjacentHTML('beforeend',
+      `<h2 class="section" id="sec-${i}">${esc(sec.name)}</h2>${storyCardsHTML(sec.stories)}`);
   });
 }
 
@@ -330,154 +343,92 @@ function showError(msg) {
 }
 
 // ---------- prompt ----------
-function buildPrompt(sectionLabels) {
-  return `Today is ${todayStr()}. Create my daily news digest by searching the web for today's (and the last ~24 hours') most important stories.
+function buildSectionPrompt(label) {
+  return `Today is ${todayStr()}. You are writing the "${label}" section of a daily news digest.
 
-Sections to cover, in this order: ${sectionLabels.join(', ')}.
+Search the web for the most important ${label} stories of the last 24 hours (for niche topics with little same-day news, cover the most notable developments of the past few days). Be efficient: one broad search, plus at most one or two follow-ups only if needed.
 
-For EACH section pick the 3 most significant stories (2 per section if more than 6 sections are listed). For niche/custom topics with little same-day news, cover the most notable developments of the past few days instead. For EACH story provide:
+Pick the 3 most significant stories. For EACH story provide:
 - "headline": a clear, specific headline
 - "bullets": exactly 3 short bullet points on what happened (the news itself: who/what/numbers/quotes)
 - "context": exactly 3 short bullet points of background and context for someone who hasn't followed the topic (e.g., for an Iran story: the history of the standoff, what led up to this, why it matters / what could happen next)
 - "sources": 2-3 sources with real URLs taken from your search results, as {"name": "Reuters", "url": "https://..."}
 
-Search efficiently — roughly one broad search per section, plus follow-ups only where needed. Prefer reputable outlets (Reuters, AP, Bloomberg, FT, WSJ, BBC, NYT, Axios, Politico...). Do not invent URLs; only use URLs that appeared in search results.
+Prefer reputable outlets (Reuters, AP, Bloomberg, FT, WSJ, BBC, NYT, Axios, Politico...). Do not invent URLs; only use URLs that appeared in search results.
 
 Your final message must be ONLY a single JSON object, no markdown fences, no commentary, in exactly this shape:
-{"sections":[{"name":"US Politics","stories":[{"headline":"...","bullets":["...","...","..."],"context":["...","...","..."],"sources":[{"name":"...","url":"..."}]}]}]}`;
+{"name":"${label}","stories":[{"headline":"...","bullets":["...","...","..."],"context":["...","...","..."],"sources":[{"name":"...","url":"..."}]}]}`;
 }
 
-// ---------- streaming API call ----------
-async function generate(force) {
-  const key = store.key;
-  if (!key) { openSettings(); return; }
+// ---------- per-section streaming request ----------
+async function runSection(label, model, key, onStatus) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 6000,
+      stream: true,
+      system: 'You are a sharp, neutral news editor writing one section of a morning briefing for a busy reader. You are factual, specific, and concise. You always follow output format instructions exactly.',
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
+      messages: [{ role: 'user', content: buildSectionPrompt(label) }],
+    }),
+  });
 
-  const secIds = store.sections;
-  const labels = SECTIONS.filter(s => secIds.includes(s.id)).map(s => s.label).concat(customList());
-  if (!labels.length) { openSettings(); return; }
-  const cacheSig = todayKey() + '|' + secIds.join(',') + '|' + customList().join(',');
-
-  if (!force) {
-    const c = store.cache;
-    if (c && c.sig === cacheSig && c.data) {
-      renderDigest(c.data);
-      $('updated').textContent = 'Updated ' + new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      return;
-    }
+  if (!resp.ok) {
+    let detail = '';
+    try { detail = (await resp.json()).error?.message || ''; } catch (e) {}
+    if (resp.status === 401) throw new Error('Your API key was rejected (401). Check it in Settings.');
+    if (resp.status === 429) throw new Error('Rate limited (429) — wait a moment and refresh.');
+    throw new Error(`API error ${resp.status}. ${detail}`);
   }
 
-  $('btnGenerate').disabled = true;
-  $('content').innerHTML = '';
-  $('chips').innerHTML = '';
-  $('updated').textContent = '';
-  $('loading').style.display = 'block';
-  const log = $('statusLog');
-  log.innerHTML = '';
-  let searchCount = 0;
-  const setStatus = (msg) => {
-    [...log.children].forEach(el => el.classList.remove('active'));
-    const line = document.createElement('div');
-    line.className = 'active';
-    line.textContent = msg;
-    log.appendChild(line);
-  };
-  const bumpSearch = () => {
-    searchCount++;
-    const last = log.lastElementChild;
-    if (last && last.dataset.kind === 'search') {
-      last.textContent = `Searching the web… (${searchCount} searches)`;
-    } else {
-      [...log.children].forEach(el => el.classList.remove('active'));
-      const line = document.createElement('div');
-      line.className = 'active';
-      line.dataset.kind = 'search';
-      line.textContent = 'Searching the web… (1 search)';
-      log.appendChild(line);
-    }
-  };
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let text = '';
+  let stopReason = null;
+  let searches = 0;
 
-  setStatus('Contacting Claude…');
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-8',
-        max_tokens: 16000,
-        stream: true,
-        system: 'You are a sharp, neutral news editor writing a morning briefing for a busy reader. You are factual, specific, and concise. You always follow output format instructions exactly.',
-        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: Math.min(4 + labels.length * 2, 20) }],
-        messages: [{ role: 'user', content: buildPrompt(labels) }],
-      }),
-    });
-
-    if (!resp.ok) {
-      let detail = '';
-      try { detail = (await resp.json()).error?.message || ''; } catch (e) {}
-      if (resp.status === 401) throw new Error('Your API key was rejected (401). Check it in Settings.');
-      throw new Error(`API error ${resp.status}. ${detail}`);
-    }
-
-    // Parse SSE stream
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    let text = '';
-    let stopReason = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        let ev;
-        try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
-        if (ev.type === 'content_block_start') {
-          const t = ev.content_block?.type;
-          if (t === 'server_tool_use') bumpSearch();
-          else if (t === 'web_search_tool_result') setStatus('Reading results…');
-          else if (t === 'text' && searchCount > 0) setStatus('Writing your digest…');
-        } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
-          text += ev.delta.text;
-        } else if (ev.type === 'message_delta') {
-          stopReason = ev.delta?.stop_reason || stopReason;
-        } else if (ev.type === 'error') {
-          throw new Error(ev.error?.message || 'Stream error');
-        }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let ev;
+      try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+      if (ev.type === 'content_block_start') {
+        const t = ev.content_block?.type;
+        if (t === 'server_tool_use') { searches++; onStatus(`Searching… (${searches})`); }
+        else if (t === 'web_search_tool_result') onStatus('Reading results…');
+        else if (t === 'text' && searches > 0) onStatus('Writing…');
+      } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+        text += ev.delta.text;
+      } else if (ev.type === 'message_delta') {
+        stopReason = ev.delta?.stop_reason || stopReason;
+      } else if (ev.type === 'error') {
+        throw new Error(ev.error?.message || 'Stream error');
       }
     }
-
-    if (stopReason === 'refusal') throw new Error('Claude declined this request. Try again.');
-    if (stopReason === 'pause_turn') throw new Error('The search ran long and paused. Hit "Get today’s digest" to try again (or trim sections in Settings).');
-    if (stopReason === 'max_tokens') throw new Error('The digest was cut off. Try fewer sections in Settings.');
-
-    const data = extractJSON(text);
-    if (!data || !Array.isArray(data.sections) || !data.sections.length) {
-      throw new Error('Could not read the digest from the response. Try again.');
-    }
-
-    store.cache = { sig: cacheSig, at: Date.now(), data };
-    renderDigest(data);
-    $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  } catch (err) {
-    if (err instanceof TypeError) {
-      showError('Network error reaching api.anthropic.com — check your connection and try again.');
-    } else {
-      showError(err.message);
-    }
-  } finally {
-    $('loading').style.display = 'none';
-    $('btnGenerate').disabled = false;
   }
+
+  if (stopReason === 'refusal') throw new Error('Claude declined this section. Try refreshing.');
+  if (stopReason === 'pause_turn') throw new Error('This section ran long — refresh to retry.');
+  if (stopReason === 'max_tokens') throw new Error('This section was cut off — refresh to retry.');
+
+  const data = extractJSON(text);
+  if (!data || !Array.isArray(data.stories) || !data.stories.length) {
+    throw new Error('Could not read this section — refresh to retry.');
+  }
+  return { name: label, stories: data.stories };
 }
 
 function extractJSON(text) {
@@ -492,6 +443,81 @@ function extractJSON(text) {
   return null;
 }
 
+// ---------- generate: all sections in parallel ----------
+let inFlight = false;
+
+async function generate(force) {
+  const key = store.key;
+  if (!key) { openSettings(); return; }
+  const labels = currentLabels();
+  if (!labels.length) { openSettings(); return; }
+  if (inFlight) return;
+
+  const sig = cacheSig();
+  if (!force) {
+    const c = store.cache;
+    if (c && c.sig === sig && c.data) {
+      renderDigest(c.data);
+      $('updated').textContent = 'Updated ' + new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return;
+    }
+  }
+
+  inFlight = true;
+  $('btnGenerate').disabled = true;
+  $('updated').textContent = '';
+
+  // Build skeleton: section headers + status lines, plus nav chips
+  const chips = $('chips');
+  const content = $('content');
+  chips.innerHTML = '';
+  content.innerHTML = '';
+  const slots = labels.map((label, i) => {
+    const a = document.createElement('a');
+    a.href = '#sec-' + i;
+    a.textContent = label;
+    chips.appendChild(a);
+    content.insertAdjacentHTML('beforeend', `
+      <h2 class="section" id="sec-${i}">${esc(label)}</h2>
+      <div id="slot-${i}"><div class="secstatus"><div class="mini"></div><span>Starting…</span></div></div>`);
+    return {
+      label,
+      setStatus(msg) {
+        const el = document.querySelector(`#slot-${i} .secstatus span`);
+        if (el) el.textContent = msg;
+      },
+      done(sec) { $('slot-' + i).innerHTML = storyCardsHTML(sec.stories); },
+      fail(msg) { $('slot-' + i).innerHTML = `<div class="secerror">⚠️ ${esc(msg)}</div>`; },
+    };
+  });
+
+  const model = store.model;
+  const results = await Promise.allSettled(labels.map((label, i) =>
+    runSection(label, model, key, slots[i].setStatus).then(sec => { slots[i].done(sec); return sec; })
+  ));
+
+  const sections = [];
+  let failures = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') sections.push(r.value);
+    else { failures++; slots[i].fail(r.reason?.message || 'Failed'); }
+  });
+
+  if (failures === labels.length) {
+    content.innerHTML = '';
+    chips.innerHTML = '';
+    showError(results[0].reason?.message || 'All sections failed. Check your key and connection, then refresh.');
+  } else if (failures === 0) {
+    store.cache = { sig, at: Date.now(), data: { sections } };
+    $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } else {
+    $('updated').textContent = `${failures} section${failures > 1 ? 's' : ''} failed — hit "Get today's digest" to retry`;
+  }
+
+  inFlight = false;
+  $('btnGenerate').disabled = false;
+}
+
 // ---------- settings ----------
 function openSettings() {
   $('apiKey').value = store.key;
@@ -504,11 +530,8 @@ function openSettings() {
     box.appendChild(label);
   });
   $('customTopics').value = store.custom;
+  document.querySelectorAll('#speedOpts input').forEach(r => { r.checked = (r.value === store.model); });
   $('overlay').classList.add('open');
-}
-
-function customList() {
-  return store.custom.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 function saveSettings() {
@@ -519,6 +542,8 @@ function saveSettings() {
   if (!picked.length && !custom) { alert('Pick at least one section or add a custom topic.'); return; }
   store.sections = picked;
   store.custom = custom;
+  const speed = document.querySelector('#speedOpts input:checked');
+  if (speed) store.model = speed.value;
   $('overlay').classList.remove('open');
   if (!$('content').children.length || !store.cache) init();
 }
@@ -533,8 +558,7 @@ function init() {
     return;
   }
   const c = store.cache;
-  const cacheSig = todayKey() + '|' + store.sections.join(',') + '|' + customList().join(',');
-  if (c && c.sig === cacheSig && c.data) {
+  if (c && c.sig === cacheSig() && c.data) {
     renderDigest(c.data);
     $('updated').textContent = 'Updated ' + new Date(c.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   } else {
